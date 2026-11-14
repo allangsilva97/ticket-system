@@ -10,7 +10,7 @@
 <body>
     <div id="app">
         <!-- Login Screen -->
-        <div id="login-screen" class="screen active">
+        <div id="login-screen" class="screen">
             <div class="login-card">
                 <div class="login-header">
                     <h1>🎫 Ticket System</h1>
@@ -35,7 +35,7 @@
         <div id="main-app" class="screen">
             <header class="app-header">
                 <div class="header-left">
-                    <h1>🎫 Ticket System</h1>
+                    <h1><a href="/dashboard" style="color:inherit;text-decoration:none">🎫 Gestão</a></h1>
                     <nav class="main-nav">
                         <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
                         <button class="nav-btn" data-tab="tickets">Tickets</button>
@@ -52,6 +52,9 @@
                     <div class="user-menu">
                         <span id="header-user-name"></span>
                         <span id="header-user-role" class="role-badge"></span>
+                        <a class="btn btn-secondary btn-sm" href="/dashboard">Dashboard</a>
+                        <a class="btn btn-secondary btn-sm staff-only" href="/tecnico">Área técnica</a>
+                        <a class="btn btn-secondary btn-sm" href="/perfil">Perfil</a>
                         <button class="btn btn-secondary btn-sm" id="logout-btn">Logout</button>
                     </div>
                 </div>

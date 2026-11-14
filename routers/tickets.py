@@ -45,7 +45,8 @@ def ticket_is_overdue(ticket) -> bool:
 
 def to_ticket_list(t: Ticket) -> TicketList:
     return TicketList(
-        id=t.id, title=t.title, status=t.status, priority=t.priority, category=t.category,
+        id=t.id, tracking_code=t.tracking_code, title=t.title,
+        status=t.status, priority=t.priority, category=t.category,
         company_name=t.company.name if t.company else "-", company_id=t.company_id,
         assignee_name=t.assignee.full_name if t.assignee else None,
         assignee_id=t.assignee_id,
@@ -151,6 +152,8 @@ def list_tickets(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     overdue_only: bool = False,
+    unassigned: bool = False,
+    open_only: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
@@ -185,6 +188,10 @@ def list_tickets(
         query = query.filter(Ticket.created_at >= date_from)
     if date_to:
         query = query.filter(Ticket.created_at <= date_to)
+    if unassigned:
+        query = query.filter(Ticket.assignee_id.is_(None))
+    if open_only:
+        query = query.filter(Ticket.status.not_in(FINAL_STATUSES))
     if overdue_only:
         query = query.filter(and_(Ticket.sla_due_at < utcnow(), Ticket.status.not_in(FINAL_STATUSES)))
 

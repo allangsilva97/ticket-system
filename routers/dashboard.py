@@ -1,13 +1,13 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db, utcnow
 from models import Ticket, Company, User, TicketStatus, UserRole
 from schemas import DashboardStats
-from auth import get_current_active_user
+from auth import get_current_active_user, require_agent_or_admin
 from routers.tickets import to_ticket_list
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -130,4 +130,70 @@ def get_sla_compliance(
         "total_resolved": total,
         "on_time": on_time,
         "overdue": total - on_time,
+    }
+
+
+@router.get("/overview")
+def get_staff_overview(
+    current_user: User = Depends(require_agent_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Wider view for technicians and admins: team workload, volume per company,
+    queue size and response times. Agents see their company (plus tickets assigned
+    to them); admins see everything."""
+    scoped = _scoped_ticket_query(db, current_user)
+    active = scoped.filter(Ticket.status.not_in(FINAL_STATUSES))
+    now = utcnow()
+    overdue_expr = case((Ticket.sla_due_at < now, 1), else_=0)
+
+    workload_rows = (
+        active.filter(Ticket.assignee_id.isnot(None))
+        .join(User, User.id == Ticket.assignee_id)
+        .with_entities(User.id, User.full_name, func.count(Ticket.id), func.sum(overdue_expr))
+        .group_by(User.id, User.full_name)
+        .order_by(func.count(Ticket.id).desc())
+        .all()
+    )
+    resolved_rows = dict(
+        scoped.filter(Ticket.status == TicketStatus.CLOSED, Ticket.assignee_id.isnot(None))
+        .with_entities(Ticket.assignee_id, func.count(Ticket.id))
+        .group_by(Ticket.assignee_id).all()
+    )
+    workload = [
+        {"user_id": uid, "name": name, "open": n, "overdue": int(late or 0), "resolved": resolved_rows.get(uid, 0)}
+        for uid, name, n, late in workload_rows
+    ]
+
+    company_rows = (
+        scoped.join(Company, Company.id == Ticket.company_id)
+        .with_entities(
+            Company.name,
+            func.count(Ticket.id),
+            func.sum(case((Ticket.status.not_in(FINAL_STATUSES), 1), else_=0)),
+        )
+        .group_by(Company.name)
+        .order_by(func.count(Ticket.id).desc())
+        .limit(10)
+        .all()
+    )
+
+    # Average first response, in hours, over tickets that got one
+    responded = scoped.filter(Ticket.first_response_at.isnot(None)).with_entities(
+        Ticket.created_at, Ticket.first_response_at).all()
+    avg_first_response_h = (
+        round(sum((r.first_response_at - r.created_at).total_seconds() for r in responded) / len(responded) / 3600, 1)
+        if responded else None
+    )
+
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    oldest = active.filter(Ticket.assignee_id.is_(None)).order_by(Ticket.created_at).first()
+
+    return {
+        "unassigned_open": active.filter(Ticket.assignee_id.is_(None)).count(),
+        "oldest_unassigned_at": oldest.created_at if oldest else None,
+        "created_today": scoped.filter(Ticket.created_at >= today_start).count(),
+        "closed_last_7d": scoped.filter(Ticket.closed_at >= now - timedelta(days=7)).count(),
+        "avg_first_response_hours": avg_first_response_h,
+        "workload": workload,
+        "by_company": [{"name": n, "total": t, "open": int(o or 0)} for n, t, o in company_rows],
     }

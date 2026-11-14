@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu perfil · Central de Chamados</title>
+    <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<main class="container">
+    <h1 class="page-title">Meu perfil</h1>
+    <p class="page-subtitle" id="subtitle"></p>
+
+    <div class="grid-2">
+        <div class="card">
+            <h2>Dados pessoais</h2>
+            <form id="profile-form">
+                <div class="field">
+                    <label for="full_name">Nome completo</label>
+                    <input type="text" id="full_name" required maxlength="255">
+                </div>
+                <div class="field">
+                    <label for="email">E-mail</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="role">Perfil</label>
+                        <input type="text" id="role" readonly>
+                    </div>
+                    <div class="field">
+                        <label for="company">Empresa</label>
+                        <input type="text" id="company" readonly>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="language">Idioma das notificações</label>
+                    <select id="language">
+                        <option value="pt-BR">Português</option>
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="save-profile">Salvar alterações</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Alterar senha</h2>
+            <div id="pw-error" class="alert alert-error hidden" role="alert"></div>
+            <form id="password-form">
+                <div class="field">
+                    <label for="current_password">Senha atual</label>
+                    <input type="password" id="current_password" autocomplete="current-password" required>
+                </div>
+                <div class="field">
+                    <label for="new_password">Nova senha</label>
+                    <input type="password" id="new_password" autocomplete="new-password" minlength="8" required>
+                    <div class="hint">Mínimo de 8 caracteres.</div>
+                </div>
+                <div class="field">
+                    <label for="confirm_password">Confirmar nova senha</label>
+                    <input type="password" id="confirm_password" autocomplete="new-password" minlength="8" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="save-password">Alterar senha</button>
+                </div>
+            </form>
+            <p style="color:var(--muted);font-size:.85rem;margin-top:1rem" id="last-login"></p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:1.25rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+            <h2 style="margin:0">Meus chamados</h2>
+            <a class="btn btn-primary btn-sm" href="/abrir-chamado">+ Abrir chamado</a>
+        </div>
+        <div class="table-wrap">
+            <table class="list">
+                <thead><tr><th>Código</th><th>Assunto</th><th>Status</th><th>Urgência</th><th>Aberto</th><th></th></tr></thead>
+                <tbody id="tickets"><tr><td colspan="6" class="empty">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script src="/static/portal.js"></script>
+<script>
+    (async () => {
+        let me = await Portal.requireAuth();
+        Portal.header('perfil');
+        const { esc, LABELS, fmtDate, relTime, statusBadge, priorityBadge, formatCode } = Portal;
+        const $ = id => document.getElementById(id);
+
+        function fillProfile() {
+            $('subtitle').textContent = `Olá, ${me.full_name.split(' ')[0]}! Gerencie seus dados e acompanhe seus chamados.`;
+            $('full_name').value = me.full_name;
+            $('email').value = me.email;
+            $('role').value = LABELS.role[me.role] || me.role;
+            $('company').value = me.company?.name || '—';
+            $('language').value = me.language || 'pt-BR';
+            $('last-login').textContent = me.last_login ? `Último acesso: ${fmtDate(me.last_login)}` : '';
+        }
+        fillProfile();
+
+        $('profile-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            $('save-profile').disabled = true;
+            try {
+                me = await Portal.api('/auth/me', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        full_name: $('full_name').value.trim(),
+                        email: $('email').value.trim(),
+                        language: $('language').value,
+                    }),
+                });
+                localStorage.setItem('user', JSON.stringify(me));
+                fillProfile();
+                document.querySelector('.portal-user .who').textContent = me.full_name;
+                Portal.toast('Perfil atualizado.', 'success');
+            } catch (err) {
+                Portal.toast(err.message, 'error');
+            } finally {
+                $('save-profile').disabled = false;
+            }
+        });
+
+        $('password-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const box = $('pw-error');
+            box.classList.add('hidden');
+            const fail = msg => { box.textContent = msg; box.classList.remove('hidden'); };
+            if ($('new_password').value.length < 8) return fail('A nova senha precisa ter pelo menos 8 caracteres.');
+            if ($('new_password').value !== $('confirm_password').value) return fail('A confirmação não confere com a nova senha.');
+
+            $('save-password').disabled = true;
+            try {
+                await Portal.api('/auth/me/password', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        current_password: $('current_password').value,
+                        new_password: $('new_password').value,
+                    }),
+                });
+                $('password-form').reset();
+                Portal.toast('Senha alterada com sucesso.', 'success');
+            } catch (err) {
+                fail(err.message === 'Current password is incorrect' ? 'A senha atual está incorreta.' : err.message);
+            } finally {
+                $('save-password').disabled = false;
+            }
+        });
+
+        try {
+            // Tickets this user opened or is assigned to (latest 50)
+            const list = await Portal.api(`/users/${me.id}/tickets`);
+            $('tickets').innerHTML = list.length ? list.map(t => `
+                <tr>
+                    <td><span class="code">${formatCode(t.tracking_code)}</span></td>
+                    <td>${esc(t.title)}</td>
+                    <td>${statusBadge(t.status, Portal.isStaff(me))}</td>
+                    <td>${priorityBadge(t.priority)}</td>
+                    <td title="${fmtDate(t.created_at)}">${relTime(t.created_at)}</td>
+                    <td><a class="btn btn-secondary btn-sm" href="/acompanhar?codigo=${encodeURIComponent(t.tracking_code || '')}">Acompanhar</a></td>
+                </tr>`).join('')
+                : '<tr><td colspan="6" class="empty">Você ainda não abriu nenhum chamado.</td></tr>';
+        } catch (err) {
+            $('tickets').innerHTML = `<tr><td colspan="6" class="empty">${esc(err.message)}</td></tr>`;
+        }
+    })().catch(err => Portal.toast(err.message, 'error'));
+</script>
+</body>
+</html>

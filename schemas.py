@@ -141,6 +141,7 @@ class TicketAssignment(BaseModel):
 
 class Ticket(TicketBase):
     id: int
+    tracking_code: Optional[str] = None
     status: TicketStatus
     creator_id: int
     assignee_id: Optional[int] = None
@@ -161,6 +162,7 @@ class Ticket(TicketBase):
 
 class TicketList(BaseModel):
     id: int
+    tracking_code: Optional[str] = None
     title: str
     status: TicketStatus
     priority: TicketPriority

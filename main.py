@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from config import settings, BASE_DIR
 from database import engine, init_db
-from routers import audit, auth, companies, dashboard, tickets, users
+from routers import audit, auth, companies, dashboard, public, tickets, users
 from services.sla_service import sla_monitor_loop
 
 logging.basicConfig(
@@ -79,7 +79,7 @@ async def integrity_exception_handler(request: Request, exc: IntegrityError):
     )
 
 
-for module in (auth, companies, tickets, users, dashboard, audit):
+for module in (auth, companies, tickets, users, dashboard, audit, public):
     app.include_router(module.router)
 
 # ============ STATIC FILES & FRONTEND ============
@@ -91,18 +91,32 @@ if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def read_root():
-    index_path = static_dir / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    return HTMLResponse("""
-    <html><body style="font-family: system-ui; padding: 2rem; text-align: center;">
-        <h1>Ticket System</h1>
-        <p>Frontend not built yet.</p>
-        <p><a href="/docs">API Documentation</a></p>
-    </body></html>
-    """)
+
+
+# Portal pages: one HTML file per route, sharing /static/portal.js and portal.css
+# "/" is the login screen; after login everyone lands on /dashboard.
+# The original single-page admin panel (index.html) lives at /painel.
+PORTAL_PAGES = {
+    "/": "login.html",
+    "/login": "login.html",
+    "/dashboard": "dashboard.html",
+    "/painel": "index.html",
+    "/perfil": "perfil.html",
+    "/abrir-chamado": "abrir-chamado.html",
+    "/acompanhar": "acompanhar.html",
+    "/tecnico": "tecnico.html",
+}
+
+
+def _page_route(filename: str):
+    async def serve_page():
+        return FileResponse(str(static_dir / filename))
+    return serve_page
+
+
+for _path, _file in PORTAL_PAGES.items():
+    app.add_api_route(_path, _page_route(_file), methods=["GET"], include_in_schema=False,
+                      response_class=HTMLResponse)
 
 
 def _database_ok() -> bool:

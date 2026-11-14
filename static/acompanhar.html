@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acompanhar chamado · Central de Chamados</title>
+    <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<main class="container container-narrow">
+    <h1 class="page-title">Acompanhar chamado</h1>
+    <p class="page-subtitle">Digite o código que você recebeu ao abrir o chamado. Não é preciso fazer login.</p>
+
+    <div class="card">
+        <form id="search-form" class="track-search">
+            <input type="text" id="code" placeholder="Ex.: ABCDE-23456" maxlength="14" autocomplete="off"
+                   aria-label="Código do chamado" required>
+            <button class="btn btn-primary" type="submit" id="search-btn">Consultar</button>
+        </form>
+        <div id="error" class="alert alert-error hidden" role="alert" style="margin:1rem 0 0"></div>
+    </div>
+
+    <div id="result" class="hidden"></div>
+
+    <div class="card hidden" id="mine-card" style="margin-top:1.25rem">
+        <h2>Seus chamados</h2>
+        <div class="table-wrap">
+            <table class="list">
+                <thead><tr><th>Código</th><th>Assunto</th><th>Status</th><th>Atualizado</th></tr></thead>
+                <tbody id="mine"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script src="/static/portal.js"></script>
+<script>
+    Portal.header('acompanhar');
+    const { esc, fmtDate, relTime, statusBadge, priorityBadge, formatCode, LABELS } = Portal;
+    const form = document.getElementById('search-form');
+    const input = document.getElementById('code');
+    const errorBox = document.getElementById('error');
+    const result = document.getElementById('result');
+    const btn = document.getElementById('search-btn');
+
+    // Progress steps: where the ticket is in its life
+    function steps(t) {
+        if (t.status === 'cancelled') {
+            return '<div class="alert alert-info" style="margin-top:1.25rem">Este chamado foi cancelado.</div>';
+        }
+        const stage = t.status === 'closed' ? 3 : t.status === 'open' && !t.assignee_name ? 1 : 2;
+        const names = ['Recebido', 'Em atendimento', 'Resolvido'];
+        return `<div class="steps">${names.map((n, i) => {
+            const cls = i + 1 < stage ? 'done' : i + 1 === stage ? 'done current' : '';
+            return `<div class="step ${cls}"><div class="dot">${i + 1 <= stage ? '✓' : i + 1}</div>${n}</div>`;
+        }).join('')}</div>`;
+    }
+
+    function render(t) {
+        const loggedIn = !!Portal.token();
+        const loginLink = `/?next=${encodeURIComponent('/acompanhar?codigo=' + t.tracking_code)}`;
+        const waiting = t.status === 'waiting_customer'
+            ? `<div class="alert alert-info">A equipe está aguardando uma resposta sua.
+               ${loggedIn ? 'Use o campo abaixo da conversa.' : `<a href="${loginLink}">Entre na sua conta</a> para responder.`}</div>` : '';
+        const finished = t.status === 'closed' || t.status === 'cancelled';
+        const reply = loggedIn
+            ? `<form id="reply-form" class="reply-box">
+                   <textarea id="reply" rows="3" required placeholder="${finished
+                       ? 'Escreva aqui se o problema voltou…' : 'Escreva uma mensagem para a equipe…'}"></textarea>
+                   <div class="reply-actions"><span></span>
+                       <button class="btn btn-primary" type="submit">Enviar mensagem</button></div>
+               </form>`
+            : `<p style="margin-top:1rem;color:var(--muted);font-size:.9rem">
+                   <a href="${loginLink}">Entre</a> para enviar mensagens neste chamado.</p>`;
+        const messages = t.comments.length
+            ? t.comments.map(c => `
+                <div class="msg ${c.is_staff ? 'staff' : 'client'}">
+                    <div class="msg-head"><strong>${esc(c.author_name)}${c.is_staff ? ' · Suporte' : ''}</strong>
+                        <span title="${fmtDate(c.created_at)}">${relTime(c.created_at)}</span></div>
+                    <div class="msg-body">${esc(c.content)}</div>
+                </div>`).join('')
+            : '<p class="empty">Ainda não há mensagens neste chamado.</p>';
+
+        result.innerHTML = `
+            <div class="card" style="margin-top:1.25rem">
+                <div class="detail-head">
+                    <div>
+                        <span class="code">${formatCode(t.tracking_code)}</span>
+                        <h2>${esc(t.title)}</h2>
+                        <div style="display:flex;gap:.4rem;flex-wrap:wrap">${statusBadge(t.status)} ${priorityBadge(t.priority)}
+                            ${t.is_overdue ? '<span class="badge badge-overdue">Prazo excedido</span>' : ''}</div>
+                    </div>
+                    <span style="color:var(--muted);font-size:.85rem">Atualizado ${relTime(t.updated_at)}</span>
+                </div>
+                ${steps(t)}
+                <div class="meta-grid">
+                    <div><div class="label">Categoria</div><div class="value">${LABELS.category[t.category] || t.category}</div></div>
+                    <div><div class="label">Empresa</div><div class="value">${esc(t.company_name || '-')}</div></div>
+                    <div><div class="label">Responsável</div><div class="value">${esc(t.assignee_name || 'Aguardando técnico')}</div></div>
+                    <div><div class="label">Aberto em</div><div class="value">${fmtDate(t.created_at)}</div></div>
+                    <div><div class="label">${t.closed_at ? 'Resolvido em' : 'Previsão (SLA)'}</div>
+                        <div class="value">${fmtDate(t.closed_at || t.sla_due_at)}</div></div>
+                </div>
+                ${waiting}
+                ${t.description ? `<div class="description">${esc(t.description)}</div>` : ''}
+            </div>
+            <div class="card">
+                <h2>Conversa</h2>
+                <div class="thread">${messages}</div>
+                ${reply}
+            </div>`;
+        result.classList.remove('hidden');
+
+        document.getElementById('reply-form')?.addEventListener('submit', async e => {
+            e.preventDefault();
+            const content = document.getElementById('reply').value.trim();
+            if (!content) return;
+            const button = e.target.querySelector('button');
+            button.disabled = true;
+            try {
+                await Portal.api(`/tickets/${t.id}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
+                Portal.toast('Mensagem enviada.', 'success');
+                lookup(t.tracking_code);
+            } catch (err) {
+                Portal.toast(err.status === 403 ? 'Você não tem acesso para responder a este chamado.' : err.message, 'error');
+                button.disabled = false;
+            }
+        });
+    }
+
+    // Logged-in users also get a list of their own tickets
+    async function loadMine() {
+        const me = Portal.user();
+        if (!Portal.token() || !me) return;
+        try {
+            const list = await Portal.api(`/users/${me.id}/tickets`);
+            if (!list.length) return;
+            document.getElementById('mine').innerHTML = list.map(x => `
+                <tr style="cursor:pointer" data-code="${esc(x.tracking_code || '')}">
+                    <td><span class="code">${formatCode(x.tracking_code)}</span></td>
+                    <td>${esc(x.title)}</td>
+                    <td>${statusBadge(x.status, Portal.isStaff(me))}</td>
+                    <td>${relTime(x.updated_at)}</td>
+                </tr>`).join('');
+            document.getElementById('mine-card').classList.remove('hidden');
+        } catch { /* optional section */ }
+    }
+    document.getElementById('mine').addEventListener('click', e => {
+        const row = e.target.closest('tr[data-code]');
+        if (row?.dataset.code) { lookup(row.dataset.code); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    });
+    loadMine();
+
+    async function lookup(code) {
+        errorBox.classList.add('hidden');
+        btn.disabled = true;
+        btn.textContent = 'Consultando…';
+        try {
+            const t = await Portal.api('/public/tickets/' + encodeURIComponent(code), { public: true });
+            input.value = formatCode(t.tracking_code);
+            history.replaceState(null, '', '/acompanhar?codigo=' + t.tracking_code);
+            render(t);
+        } catch (err) {
+            result.classList.add('hidden');
+            errorBox.textContent = err.message;
+            errorBox.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Consultar';
+        }
+    }
+
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        const code = input.value.replace(/[^a-z0-9]/gi, '');
+        if (code) lookup(code);
+    });
+
+    const initial = new URLSearchParams(location.search).get('codigo');
+    if (initial) { input.value = initial; lookup(initial); }
+</script>
+</body>
+</html>

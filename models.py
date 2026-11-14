@@ -1,4 +1,5 @@
 import enum
+import secrets
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Index, JSON
 from sqlalchemy.orm import relationship
@@ -57,6 +58,17 @@ class TicketCategory(str, enum.Enum):
     SECURITY = "security"
     OTHER = "other"
 
+# Unambiguous alphabet (no 0/O, 1/I/L) - the code is typed by people
+TRACKING_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+TRACKING_CODE_LENGTH = 10
+
+
+def generate_tracking_code() -> str:
+    """Random public code used to follow a ticket without logging in.
+    31^10 ≈ 8e14 combinations, so codes cannot be enumerated."""
+    return "".join(secrets.choice(TRACKING_ALPHABET) for _ in range(TRACKING_CODE_LENGTH))
+
+
 # ============ MODELS ============
 
 class User(Base):
@@ -104,6 +116,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id = Column(Integer, primary_key=True, index=True)
+    tracking_code = Column(String(16), unique=True, index=True, nullable=True, default=generate_tracking_code)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(SQLEnum(TicketStatus), default=TicketStatus.OPEN, nullable=False, index=True)

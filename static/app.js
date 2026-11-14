@@ -291,11 +291,14 @@ function checkAuth() {
     if (token && user) {
         accessToken = token;
         try { currentUser = JSON.parse(user); } catch { logout(); return; }
+        // Management panel is for technicians and admins; clients use the portal
+        if (currentUser.role === 'client') { location.replace('/dashboard'); return; }
         showMainApp();
         // refresh user data (role/name may have changed); a 401 here logs out automatically
         apiRequest('/auth/me').then(me => {
             currentUser = me;
             localStorage.setItem('user', JSON.stringify(me));
+            if (me.role === 'client') { location.replace('/dashboard'); return; }
             updateUIForRole();
         }).catch(() => {});
     } else {
@@ -303,11 +306,9 @@ function checkAuth() {
     }
 }
 
+// Login now lives on its own page ("/"); this panel only runs with a session
 function showLoginScreen() {
-    document.getElementById('login-screen').classList.add('active');
-    document.getElementById('main-app').classList.remove('active');
-    document.getElementById('login-form').reset();
-    document.getElementById('login-error').classList.add('hidden');
+    location.href = '/?next=' + encodeURIComponent('/painel' + location.hash);
 }
 
 function showMainApp() {

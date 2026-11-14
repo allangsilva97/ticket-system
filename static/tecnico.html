@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Área técnica · Central de Chamados</title>
+    <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<main class="container">
+    <h1 class="page-title">Área técnica</h1>
+    <p class="page-subtitle">Assuma chamados da fila, converse com o cliente e registre notas internas.</p>
+
+    <div class="tech-stats">
+        <div class="stat"><div class="n" id="s-mine">–</div><div class="l">Comigo, em aberto</div></div>
+        <div class="stat"><div class="n" id="s-queue">–</div><div class="l">Na fila sem responsável</div></div>
+        <div class="stat warn"><div class="n" id="s-overdue">–</div><div class="l">Com prazo excedido</div></div>
+        <div class="stat"><div class="n" id="s-closed">–</div><div class="l">Resolvidos por mim</div></div>
+    </div>
+
+    <div class="tech-layout">
+        <section class="card queue" aria-label="Lista de chamados">
+            <div class="queue-tabs" role="tablist">
+                <button data-tab="mine" class="active">Meus<span class="count" id="c-mine"></span></button>
+                <button data-tab="queue">Fila<span class="count" id="c-queue"></span></button>
+                <button data-tab="overdue">Atrasados<span class="count" id="c-overdue"></span></button>
+                <button data-tab="all">Todos</button>
+            </div>
+            <div class="queue-search">
+                <input type="text" id="search" placeholder="Buscar por assunto ou descrição…" aria-label="Buscar">
+            </div>
+            <div class="queue-list" id="queue-list"><p class="empty">Carregando…</p></div>
+        </section>
+
+        <section class="card" id="detail" aria-live="polite">
+            <div class="detail-empty">
+                <div style="font-size:2.2rem">🛠️</div>
+                <p>Selecione um chamado na lista para ver os detalhes.</p>
+            </div>
+        </section>
+    </div>
+</main>
+
+<script src="/static/portal.js"></script>
+<script>
+(async () => {
+    const me = await Portal.requireAuth(['admin', 'agent']);
+    Portal.header('tecnico');
+    const { esc, LABELS, fmtDate, relTime, statusBadge, priorityBadge, formatCode } = Portal;
+    const $ = id => document.getElementById(id);
+
+    const TABS = {
+        mine: `assignee_id=${me.id}&open_only=true`,
+        queue: 'unassigned=true&open_only=true',
+        overdue: 'overdue_only=true',
+        all: '',
+    };
+    let tab = 'mine';
+    let selectedId = null;
+    let searchTimer = null;
+
+    const count = async qs => (await Portal.api(`/tickets?page_size=1&${qs}`)).total;
+
+    async function loadStats() {
+        try {
+            const [mine, queue, overdue, closed] = await Promise.all([
+                count(TABS.mine), count(TABS.queue), count(TABS.overdue), count(`assignee_id=${me.id}&status=closed`),
+            ]);
+            $('s-mine').textContent = $('c-mine').textContent = mine;
+            $('s-queue').textContent = $('c-queue').textContent = queue;
+            $('s-overdue').textContent = $('c-overdue').textContent = overdue;
+            $('s-closed').textContent = closed;
+        } catch { /* stats are a nice-to-have */ }
+    }
+
+    async function loadList() {
+        const search = $('search').value.trim();
+        const qs = [TABS[tab], 'page_size=100', search ? 'search=' + encodeURIComponent(search) : ''].filter(Boolean).join('&');
+        try {
+            const res = await Portal.api('/tickets?' + qs);
+            $('queue-list').innerHTML = res.items.length ? res.items.map(t => `
+                <div class="queue-item ${t.id === selectedId ? 'selected' : ''}" data-id="${t.id}" tabindex="0">
+                    <div class="top"><span class="code">#${t.id}</span><span>${relTime(t.created_at)}</span></div>
+                    <div class="t">${esc(t.title)}</div>
+                    <div class="bottom">
+                        <div class="badges">${statusBadge(t.status, true)} ${priorityBadge(t.priority)}
+                            ${t.is_overdue ? '<span class="badge badge-overdue">Atrasado</span>' : ''}</div>
+                        <span>${esc(t.company_name)}</span>
+                    </div>
+                </div>`).join('')
+                : `<p class="empty">${tab === 'queue' ? 'Fila vazia. 🎉' : 'Nenhum chamado aqui.'}</p>`;
+        } catch (err) {
+            $('queue-list').innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+        }
+    }
+
+    function refresh() { loadStats(); loadList(); }
+
+    async function loadDetail(id) {
+        selectedId = id;
+        document.querySelectorAll('.queue-item').forEach(el => el.classList.toggle('selected', Number(el.dataset.id) === id));
+        try {
+            const [t, comments, attachments] = await Promise.all([
+                Portal.api(`/tickets/${id}`),
+                Portal.api(`/tickets/${id}/comments`),
+                Portal.api(`/tickets/${id}/attachments`),
+            ]);
+            renderDetail(t, comments, attachments);
+        } catch (err) {
+            Portal.toast(err.message, 'error');
+        }
+    }
+
+    function renderDetail(t, comments, attachments) {
+        const mineTicket = t.assignee_id === me.id;
+        const statusOpts = Object.keys(LABELS.status).map(s =>
+            `<option value="${s}" ${s === t.status ? 'selected' : ''}>${(LABELS.statusStaff[s] || LABELS.status[s])}</option>`).join('');
+        const prioOpts = Object.entries(LABELS.priority).map(([v, l]) =>
+            `<option value="${v}" ${v === t.priority ? 'selected' : ''}>Urgência: ${l}</option>`).join('');
+
+        const thread = comments.length ? comments.map(c => {
+            const cls = c.is_internal ? 'internal' : c.author_role === 'client' ? 'client' : 'staff';
+            return `<div class="msg ${cls}">
+                <div class="msg-head"><strong>${esc(c.author_name)}${c.is_internal ? ' · 🔒 Nota interna' : ''}</strong>
+                    <span title="${fmtDate(c.created_at)}">${relTime(c.created_at)}</span></div>
+                <div class="msg-body">${esc(c.content)}</div></div>`;
+        }).join('') : '<p class="empty">Nenhuma mensagem ainda.</p>';
+
+        const files = attachments.length ? `<div style="margin-top:1rem"><strong style="font-size:.85rem">Anexos</strong>
+            <ul style="list-style:none;margin-top:.4rem">${attachments.map(a => `<li>📎
+                <a href="#" data-download="${a.id}" data-name="${esc(a.original_filename)}">${esc(a.original_filename)}</a>
+                <span style="color:var(--muted);font-size:.8rem">· ${(a.file_size / 1024).toFixed(0)} KB · ${esc(a.uploaded_by_name)}</span>
+            </li>`).join('')}</ul></div>` : '';
+
+        $('detail').innerHTML = `
+            <div class="detail-head">
+                <div>
+                    <span class="code">#${t.id} · ${formatCode(t.tracking_code)}</span>
+                    <h2>${esc(t.title)}</h2>
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">${statusBadge(t.status, true)} ${priorityBadge(t.priority)}
+                        ${t.is_overdue ? '<span class="badge badge-overdue">Prazo excedido</span>' : ''}</div>
+                </div>
+                <a class="btn btn-secondary btn-sm" href="/acompanhar?codigo=${t.tracking_code}" target="_blank" rel="noopener">Ver como cliente ↗</a>
+            </div>
+            <div class="meta-grid">
+                <div><div class="label">Cliente</div><div class="value">${esc(t.creator.full_name)}</div>
+                    <div style="font-size:.8rem;color:var(--muted)">${esc(t.creator.email)}</div></div>
+                <div><div class="label">Empresa</div><div class="value">${esc(t.company.name)}</div></div>
+                <div><div class="label">Categoria</div><div class="value">${LABELS.category[t.category] || t.category}</div></div>
+                <div><div class="label">Responsável</div><div class="value">${esc(t.assignee?.full_name || 'Ninguém')}</div></div>
+                <div><div class="label">Aberto</div><div class="value">${fmtDate(t.created_at)}</div></div>
+                <div><div class="label">Prazo (SLA)</div><div class="value" style="${t.is_overdue ? 'color:var(--danger)' : ''}">${fmtDate(t.sla_due_at)}</div></div>
+            </div>
+            <div class="toolbar">
+                ${mineTicket
+                    ? '<button class="btn btn-secondary" id="release-btn">Devolver à fila</button>'
+                    : '<button class="btn btn-success" id="take-btn">✋ Assumir chamado</button>'}
+                <select id="status-select" aria-label="Status">${statusOpts}</select>
+                <select id="priority-select" aria-label="Urgência">${prioOpts}</select>
+            </div>
+            ${t.description ? `<div class="description">${esc(t.description)}</div>` : ''}
+            ${files}
+            <h3 style="font-size:1rem;margin:1.5rem 0 .75rem">Conversa</h3>
+            <div class="thread">${thread}</div>
+            <form class="reply-box" id="reply-form">
+                <textarea id="reply" rows="4" placeholder="Escreva uma resposta para o cliente…" required></textarea>
+                <div class="reply-actions">
+                    <label class="check"><input type="checkbox" id="internal"> 🔒 Nota interna (o cliente não vê)</label>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button type="submit" class="btn btn-secondary" data-then="">Enviar</button>
+                        <button type="submit" class="btn btn-secondary" data-then="waiting_customer">Enviar e aguardar cliente</button>
+                        <button type="submit" class="btn btn-primary" data-then="closed">Enviar e resolver</button>
+                    </div>
+                </div>
+            </form>`;
+
+        const act = async (fn, okMsg) => {
+            try { await fn(); Portal.toast(okMsg, 'success'); await loadDetail(t.id); refresh(); }
+            catch (err) { Portal.toast(err.message, 'error'); }
+        };
+        const assign = assignee_id => Portal.api(`/tickets/${t.id}/assign`, { method: 'PUT', body: JSON.stringify({ assignee_id }) });
+        const setStatus = status => Portal.api(`/tickets/${t.id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+
+        $('take-btn')?.addEventListener('click', () => act(() => assign(me.id), 'Chamado assumido.'));
+        $('release-btn')?.addEventListener('click', () => act(() => assign(null), 'Chamado devolvido à fila.'));
+        $('status-select').addEventListener('change', e => act(() => setStatus(e.target.value), 'Status atualizado.'));
+        $('priority-select').addEventListener('change', e => act(() => Portal.api(`/tickets/${t.id}`, {
+            method: 'PUT', body: JSON.stringify({ priority: e.target.value }) }), 'Urgência atualizada (prazo recalculado).'));
+
+        $('internal').addEventListener('change', e => {
+            $('reply').placeholder = e.target.checked ? 'Nota visível apenas para a equipe…' : 'Escreva uma resposta para o cliente…';
+        });
+
+        $('reply-form').addEventListener('submit', e => {
+            e.preventDefault();
+            const content = $('reply').value.trim();
+            if (!content) return;
+            const then = e.submitter?.dataset.then;
+            act(async () => {
+                await Portal.api(`/tickets/${t.id}/comments`, {
+                    method: 'POST', body: JSON.stringify({ content, is_internal: $('internal').checked }) });
+                if (then && then !== t.status) await setStatus(then);
+            }, then === 'closed' ? 'Resposta enviada e chamado resolvido.' : 'Mensagem enviada.');
+        });
+
+        $('detail').querySelectorAll('[data-download]').forEach(a => a.addEventListener('click', async e => {
+            e.preventDefault();
+            try {
+                const res = await fetch(`/api/tickets/attachments/${a.dataset.download}/download`,
+                    { headers: { Authorization: `Bearer ${Portal.token()}` } });
+                if (!res.ok) throw new Error('Não foi possível baixar o arquivo.');
+                const url = URL.createObjectURL(await res.blob());
+                const link = Object.assign(document.createElement('a'), { href: url, download: a.dataset.name });
+                link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (err) { Portal.toast(err.message, 'error'); }
+        }));
+    }
+
+    document.querySelectorAll('.queue-tabs button').forEach(btn => btn.addEventListener('click', () => {
+        document.querySelectorAll('.queue-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        tab = btn.dataset.tab;
+        loadList();
+    }));
+    $('queue-list').addEventListener('click', e => {
+        const item = e.target.closest('.queue-item');
+        if (item) loadDetail(Number(item.dataset.id));
+    });
+    $('queue-list').addEventListener('keydown', e => {
+        const item = e.target.closest('.queue-item');
+        if (item && e.key === 'Enter') loadDetail(Number(item.dataset.id));
+    });
+    $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadList, 300); });
+
+    refresh();
+    setInterval(refresh, 60000);  // keep the queue fresh
+})().catch(err => Portal.toast(err.message, 'error'));
+</script>
+</body>
+</html>

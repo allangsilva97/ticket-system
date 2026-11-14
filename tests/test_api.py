@@ -223,5 +223,100 @@ class DashboardTests(ApiTestCase):
         self.assertEqual(self.client.get("/api/dashboard/charts/sla-compliance", headers=self.admin).status_code, 200)
 
 
+class PublicTrackingTests(ApiTestCase):
+    def test_ticket_gets_unique_tracking_code(self):
+        a = self.create_ticket(self.client_a, self.company_a)
+        b = self.create_ticket(self.client_a, self.company_a)
+        self.assertEqual(len(a["tracking_code"]), 10)
+        self.assertNotEqual(a["tracking_code"], b["tracking_code"])
+
+    def test_track_without_login_hides_internal_data(self):
+        ticket = self.create_ticket(self.client_a, self.company_a)
+        url = f"/api/tickets/{ticket['id']}/comments"
+        self.client.post(url, json={"content": "Public reply"}, headers=self.agent)
+        self.client.post(url, json={"content": "Secret note", "is_internal": True}, headers=self.agent)
+
+        r = self.client.get(f"/api/public/tickets/{ticket['tracking_code']}")  # no auth header
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["title"], "Printer broken")
+        self.assertEqual([c["content"] for c in body["comments"]], ["Public reply"])
+        self.assertNotIn("@", r.text)  # no e-mail addresses leak
+
+    def test_track_accepts_formatted_code(self):
+        code = self.create_ticket(self.client_a, self.company_a)["tracking_code"]
+        r = self.client.get(f"/api/public/tickets/{code[:5].lower()}-{code[5:].lower()}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_track_unknown_code_404(self):
+        self.assertEqual(self.client.get("/api/public/tickets/ABCDEFGHJK").status_code, 404)
+        self.assertEqual(self.client.get("/api/public/tickets/1").status_code, 404)
+
+    def test_unassigned_and_open_only_filters(self):
+        t1 = self.create_ticket(self.client_a, self.company_a)
+        t2 = self.create_ticket(self.client_a, self.company_a)
+        self.client.put(f"/api/tickets/{t1['id']}/assign", json={"assignee_id": self.agent_id}, headers=self.agent)
+        self.client.put(f"/api/tickets/{t2['id']}/status", json={"status": "cancelled"}, headers=self.client_a)
+
+        queue = self.client.get("/api/tickets?unassigned=true&open_only=true", headers=self.agent).json()
+        self.assertEqual(queue["total"], 0)
+        unassigned = self.client.get("/api/tickets?unassigned=true", headers=self.agent).json()
+        self.assertEqual([t["id"] for t in unassigned["items"]], [t2["id"]])
+
+    def test_portal_pages_served(self):
+        for path in ("/", "/login", "/dashboard", "/perfil", "/abrir-chamado", "/acompanhar", "/tecnico"):
+            r = self.client.get(path)
+            self.assertEqual(r.status_code, 200, path)
+            self.assertIn("portal.js", r.text)
+
+
+class StaffOverviewTests(ApiTestCase):
+    def test_overview_staff_only_and_counts_workload(self):
+        t = self.create_ticket(self.client_a, self.company_a)
+        self.create_ticket(self.client_a, self.company_a)
+        self.client.put(f"/api/tickets/{t['id']}/assign", json={"assignee_id": self.agent_id}, headers=self.agent)
+
+        self.assertEqual(self.client.get("/api/dashboard/overview", headers=self.client_a).status_code, 403)
+        r = self.client.get("/api/dashboard/overview", headers=self.admin)
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["unassigned_open"], 1)
+        self.assertEqual([(w["user_id"], w["open"]) for w in body["workload"]], [(self.agent_id, 1)])
+        self.assertEqual(body["by_company"][0], {"name": "Company A", "total": 2, "open": 2})
+        self.assertIsNotNone(body["avg_first_response_hours"])  # assignment set first_response_at
+
+    def test_root_is_login_page(self):
+        r = self.client.get("/")
+        self.assertIn("login-form", r.text)
+        self.assertIn("app.js", self.client.get("/painel").text)
+
+
+class MigrationTests(unittest.TestCase):
+    def test_legacy_database_gets_tracking_codes(self):
+        from sqlalchemy import text
+        from database import init_db
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        with engine.begin() as conn:
+            # Recreate tickets as it was before v2.1 (no tracking_code column)
+            conn.execute(text("DROP TABLE tickets"))
+            conn.execute(text("CREATE TABLE tickets (id INTEGER PRIMARY KEY, title VARCHAR(255) NOT NULL, "
+                              "description TEXT, status VARCHAR(19) NOT NULL, priority VARCHAR(8) NOT NULL, "
+                              "category VARCHAR(15) NOT NULL, company_id INTEGER NOT NULL, "
+                              "creator_id INTEGER NOT NULL, "
+                              "assignee_id INTEGER, sla_due_at DATETIME, first_response_at DATETIME, "
+                              "resolved_at DATETIME, sla_warning_notified_at DATETIME, "
+                              "sla_breach_notified_at DATETIME, created_at DATETIME, updated_at DATETIME, "
+                              "closed_at DATETIME)"))
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            conn.execute(text("INSERT INTO tickets (id, title, status, priority, category, company_id, creator_id) "
+                              "VALUES (1, 'old', 'OPEN', 'MEDIUM', 'OTHER', 1, 1)"))
+        init_db()
+        with engine.connect() as conn:
+            code = conn.execute(text("SELECT tracking_code FROM tickets WHERE id = 1")).scalar()
+        self.assertEqual(len(code), 10)
+        Base.metadata.drop_all(bind=engine)
+
+
 if __name__ == "__main__":
     unittest.main()

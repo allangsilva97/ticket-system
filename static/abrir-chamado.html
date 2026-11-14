@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abrir chamado · Central de Chamados</title>
+    <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<main class="container container-narrow">
+    <h1 class="page-title">Abrir chamado</h1>
+    <p class="page-subtitle">Descreva o problema com o máximo de detalhes. Você receberá um código para acompanhar o atendimento.</p>
+
+    <div class="card" id="form-card">
+        <div id="error" class="alert alert-error hidden" role="alert"></div>
+        <div id="no-company" class="alert alert-info hidden">
+            Sua conta não está vinculada a nenhuma empresa, por isso não é possível abrir chamados.
+            Fale com o administrador do sistema.
+        </div>
+        <form id="ticket-form">
+            <div class="field">
+                <label for="title">Assunto *</label>
+                <input type="text" id="title" maxlength="255" required placeholder="Ex.: Impressora do 2º andar não imprime">
+            </div>
+            <div class="row">
+                <div class="field">
+                    <label for="category">Categoria</label>
+                    <select id="category"></select>
+                </div>
+                <div class="field">
+                    <label for="priority">Urgência</label>
+                    <select id="priority"></select>
+                    <div class="hint">Define o prazo de atendimento (SLA).</div>
+                </div>
+            </div>
+            <div class="field" id="company-field">
+                <label for="company">Empresa *</label>
+                <select id="company" required></select>
+            </div>
+            <div class="field">
+                <label for="description">Descrição *</label>
+                <textarea id="description" rows="6" required
+                          placeholder="O que aconteceu? Desde quando? Alguma mensagem de erro? O que você já tentou?"></textarea>
+            </div>
+            <div class="field">
+                <label for="file">Anexo (opcional)</label>
+                <input type="file" id="file">
+                <div class="hint">Prints, PDFs ou documentos. Máx. 10 MB.</div>
+            </div>
+            <div class="form-actions">
+                <button type="reset" class="btn btn-secondary">Limpar</button>
+                <button type="submit" class="btn btn-primary" id="submit">Enviar chamado</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card hidden" id="success-card">
+        <div class="success-box">
+            <div class="icon">✅</div>
+            <h2>Chamado aberto com sucesso!</h2>
+            <p style="color:var(--muted)">Guarde este código. Com ele, qualquer pessoa pode acompanhar o chamado sem login.</p>
+            <div class="code-display">
+                <span class="code" id="new-code"></span>
+                <button class="btn btn-secondary btn-sm" id="copy-btn">Copiar</button>
+            </div>
+            <p id="attach-warning" class="alert alert-error hidden"></p>
+            <div class="form-actions" style="justify-content:center">
+                <a class="btn btn-primary" id="track-link" href="#">Acompanhar chamado</a>
+                <button class="btn btn-secondary" id="another-btn">Abrir outro chamado</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="/static/portal.js"></script>
+<script>
+    (async () => {
+        const me = await Portal.requireAuth();
+        Portal.header('abrir');
+        const { LABELS, esc } = Portal;
+        const $ = id => document.getElementById(id);
+
+        const fill = (sel, map, selected) => {
+            sel.innerHTML = Object.entries(map).map(([v, l]) =>
+                `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+        };
+        fill($('category'), LABELS.category, 'technical');
+        fill($('priority'), LABELS.priority, 'medium');
+
+        // Clients always open tickets for their own company; staff choose one
+        if (me.role === 'client') {
+            $('company-field').classList.add('hidden');
+            if (!me.company_id) {
+                $('no-company').classList.remove('hidden');
+                $('ticket-form').querySelectorAll('input,select,textarea,button').forEach(el => el.disabled = true);
+            }
+        } else {
+            try {
+                const res = await Portal.api('/companies?is_active=true&page_size=100');
+                $('company').innerHTML = '<option value="">Selecione…</option>' +
+                    res.items.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+                if (me.company_id) $('company').value = me.company_id;
+            } catch (err) { Portal.toast(err.message, 'error'); }
+        }
+
+        $('ticket-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            $('error').classList.add('hidden');
+            const companyId = me.role === 'client' ? me.company_id : Number($('company').value);
+            const title = $('title').value.trim();
+            const description = $('description').value.trim();
+            if (!title || !description || !companyId) {
+                $('error').textContent = 'Preencha assunto, descrição' + (me.role === 'client' ? '.' : ' e empresa.');
+                $('error').classList.remove('hidden');
+                return;
+            }
+
+            $('submit').disabled = true;
+            $('submit').textContent = 'Enviando…';
+            try {
+                const ticket = await Portal.api('/tickets', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title, description, company_id: companyId,
+                        category: $('category').value, priority: $('priority').value,
+                    }),
+                });
+
+                // The ticket exists even if the upload fails: report it but still show the code
+                const file = $('file').files[0];
+                $('attach-warning').classList.add('hidden');
+                if (file) {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    try {
+                        await Portal.api(`/tickets/${ticket.id}/attachments`, { method: 'POST', body: fd });
+                    } catch (err) {
+                        $('attach-warning').textContent = `O chamado foi aberto, mas o anexo não foi enviado: ${err.message}`;
+                        $('attach-warning').classList.remove('hidden');
+                    }
+                }
+
+                $('new-code').textContent = Portal.formatCode(ticket.tracking_code);
+                $('track-link').href = '/acompanhar?codigo=' + ticket.tracking_code;
+                $('form-card').classList.add('hidden');
+                $('success-card').classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (err) {
+                $('error').textContent = err.message;
+                $('error').classList.remove('hidden');
+            } finally {
+                $('submit').disabled = false;
+                $('submit').textContent = 'Enviar chamado';
+            }
+        });
+
+        $('copy-btn').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText($('new-code').textContent);
+                Portal.toast('Código copiado!', 'success');
+            } catch { Portal.toast('Não foi possível copiar. Selecione o código manualmente.', 'error'); }
+        });
+
+        $('another-btn').addEventListener('click', () => {
+            $('ticket-form').reset();
+            fill($('category'), LABELS.category, 'technical');
+            fill($('priority'), LABELS.priority, 'medium');
+            $('success-card').classList.add('hidden');
+            $('form-card').classList.remove('hidden');
+        });
+    })().catch(err => Portal.toast(err.message, 'error'));
+</script>
+</body>
+</html>
