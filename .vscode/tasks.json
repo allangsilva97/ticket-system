@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Setup: criar venv e instalar dependências",
+            "type": "shell",
+            "windows": {
+                "command": "py -3 -m venv .venv; .venv\\Scripts\\python -m pip install --upgrade pip; .venv\\Scripts\\pip install -r requirements-dev.txt; if (-not (Test-Path .env)) { Copy-Item .env.example .env }"
+            },
+            "command": "python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements-dev.txt && ([ -f .env ] || cp .env.example .env)",
+            "problemMatcher": []
+        },
+        {
+            "label": "Rodar API",
+            "type": "shell",
+            "windows": { "command": ".venv\\Scripts\\python -m uvicorn main:app --reload" },
+            "command": ".venv/bin/python -m uvicorn main:app --reload",
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Testes",
+            "type": "shell",
+            "windows": { "command": ".venv\\Scripts\\python -m pytest" },
+            "command": ".venv/bin/python -m pytest",
+            "group": { "kind": "test", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint (ruff)",
+            "type": "shell",
+            "windows": { "command": ".venv\\Scripts\\ruff check ." },
+            "command": ".venv/bin/ruff check .",
+            "problemMatcher": []
+        }
+    ]
+}

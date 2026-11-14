@@ -1,0 +1,34 @@
+[project]
+name = "ticket-system"
+version = "2.0.0"
+description = "Sistema de tickets de suporte multiempresa (FastAPI) com SLA, auditoria e notificações por e-mail."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    # Third-party deprecations we can't fix here (python-jose, starlette)
+    "ignore::DeprecationWarning:jose.*",
+    "ignore::DeprecationWarning:starlette.*",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [".venv/*", "tests/*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = [".venv", "venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = [
+    "B008",  # FastAPI dependencies use Depends() in argument defaults by design
+    "B904",  # HTTPException raised inside except blocks is intentional
+    "E402",  # tests set environment variables before importing the app
+    "E712",  # SQLAlchemy filters compare with == True/False
+]

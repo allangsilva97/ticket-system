@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen active">
+            <div class="login-card">
+                <div class="login-header">
+                    <h1>🎫 Ticket System</h1>
+                    <p>Sign in to continue</p>
+                </div>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+                </form>
+                <div id="login-error" class="error-message hidden"></div>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div id="main-app" class="screen">
+            <header class="app-header">
+                <div class="header-left">
+                    <h1>🎫 Ticket System</h1>
+                    <nav class="main-nav">
+                        <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
+                        <button class="nav-btn" data-tab="tickets">Tickets</button>
+                        <button class="nav-btn" data-tab="companies" id="nav-companies">Companies</button>
+                        <button class="nav-btn" data-tab="users" id="nav-users">Users</button>
+                    </nav>
+                </div>
+                <div class="header-right">
+                    <select id="language-select" class="lang-select">
+                        <option value="en">English</option>
+                        <option value="pt-BR">Português</option>
+                        <option value="es">Español</option>
+                    </select>
+                    <div class="user-menu">
+                        <span id="header-user-name"></span>
+                        <span id="header-user-role" class="role-badge"></span>
+                        <button class="btn btn-secondary btn-sm" id="logout-btn">Logout</button>
+                    </div>
+                </div>
+            </header>
+
+            <main class="app-main">
+                <!-- Dashboard Tab -->
+                <section id="dashboard-tab" class="tab-content active">
+                    <div class="page-header">
+                        <h2>Dashboard</h2>
+                    </div>
+                    <div class="stats-grid" id="stats-grid"></div>
+                    <div class="dashboard-charts">
+                        <div class="chart-card">
+                            <h3>Tickets by Status</h3>
+                            <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Tickets by Priority</h3>
+                            <div class="chart-wrap"><canvas id="chart-priority"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="dashboard-sections">
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h3>Recent Tickets</h3>
+                                <a href="#" data-tab="tickets" class="view-all">View All</a>
+                            </div>
+                            <table class="data-table" id="recent-tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Title</th>
+                                        <th>Company</th>
+                                        <th>Status</th>
+                                        <th>Priority</th>
+                                        <th>Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="section-card" id="my-tickets-section" style="display:none;">
+                            <div class="section-header">
+                                <h3>My Assigned Tickets</h3>
+                            </div>
+                            <table class="data-table" id="my-tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Title</th>
+                                        <th>Company</th>
+                                        <th>Status</th>
+                                        <th>Priority</th>
+                                        <th>SLA Due</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Tickets Tab -->
+                <section id="tickets-tab" class="tab-content">
+                    <div class="page-header">
+                        <h2>Tickets</h2>
+                        <button class="btn btn-primary" onclick="openTicketModal()">+ New Ticket</button>
+                    </div>
+                    <div class="filters-bar">
+                        <div class="filter-group">
+                            <select id="filter-status" onchange="loadTickets()">
+                                <option value="">All Status</option>
+                                <option value="open">Open</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="waiting_customer">Waiting Customer</option>
+                                <option value="waiting_third_party">Waiting 3rd Party</option>
+                                <option value="closed">Closed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                            <select id="filter-priority" onchange="loadTickets()">
+                                <option value="">All Priority</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                            <select id="filter-category" onchange="loadTickets()">
+                                <option value="">All Categories</option>
+                                <option value="technical">Technical</option>
+                                <option value="billing">Billing</option>
+                                <option value="feature_request">Feature Request</option>
+                                <option value="bug_report">Bug Report</option>
+                                <option value="general_inquiry">General Inquiry</option>
+                                <option value="access_request">Access Request</option>
+                                <option value="security">Security</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <select id="filter-company" onchange="loadTickets()">
+                                <option value="">All Companies</option>
+                            </select>
+                            <input type="text" id="filter-search" placeholder="Search..." onkeyup="debounceSearch()">
+                            <input type="checkbox" id="filter-overdue" onchange="loadTickets()">
+                            <label for="filter-overdue">Overdue Only</label>
+                        </div>
+                    </div>
+                    <table class="data-table" id="tickets-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Company</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                                <th>Category</th>
+                                <th>Assignee</th>
+                                <th>Created</th>
+                                <th>SLA Due</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="pagination" id="tickets-pagination"></div>
+                </section>
+
+                <!-- Companies Tab -->
+                <section id="companies-tab" class="tab-content">
+                    <div class="page-header">
+                        <h2>Companies</h2>
+                        <button class="btn btn-primary admin-only" onclick="openCompanyModal()">+ New Company</button>
+                    </div>
+                    <table class="data-table" id="companies-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Location</th>
+                                <th>Tickets</th>
+                                <th>Users</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </section>
+
+                <!-- Users Tab (Admin/Agent only) -->
+                <section id="users-tab" class="tab-content">
+                    <div class="page-header">
+                        <h2>Users</h2>
+                        <button class="btn btn-primary" onclick="openUserModal()">+ New User</button>
+                    </div>
+                    <div class="filters-bar">
+                        <select id="filter-user-role" onchange="loadUsers()">
+                            <option value="">All Roles</option>
+                            <option value="admin">Admin</option>
+                            <option value="agent">Agent</option>
+                            <option value="client">Client</option>
+                        </select>
+                        <select id="filter-user-company" onchange="loadUsers()">
+                            <option value="">All Companies</option>
+                        </select>
+                        <input type="text" id="filter-user-search" placeholder="Search users..." onkeyup="debounceUserSearch()">
+                    </div>
+                    <table class="data-table" id="users-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Company</th>
+                                <th>Language</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="pagination" id="users-pagination"></div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="ticket-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="ticket-modal-title">New Ticket</h3>
+                <button class="modal-close" onclick="closeTicketModal()">&times;</button>
+            </div>
+            <form id="ticket-form">
+                <input type="hidden" id="ticket-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Title *</label>
+                        <input type="text" id="ticket-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="ticket-category">
+                            <option value="technical">Technical</option>
+                            <option value="billing">Billing</option>
+                            <option value="feature_request">Feature Request</option>
+                            <option value="bug_report">Bug Report</option>
+                            <option value="general_inquiry" selected>General Inquiry</option>
+                            <option value="access_request">Access Request</option>
+                            <option value="security">Security</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="ticket-description" rows="4"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Company *</label>
+                        <select id="ticket-company" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="ticket-priority">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row" id="ticket-assignee-row" style="display:none;">
+                    <div class="form-group">
+                        <label>Assignee</label>
+                        <select id="ticket-assignee">
+                            <option value="">Unassigned</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="ticket-status-group" style="display:none;">
+                    <label>Status</label>
+                    <select id="ticket-status">
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="waiting_customer">Waiting Customer</option>
+                        <option value="waiting_third_party">Waiting 3rd Party</option>
+                        <option value="closed">Closed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTicketModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="company-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="company-modal-title">New Company</h3>
+                <button class="modal-close" onclick="closeCompanyModal()">&times;</button>
+            </div>
+            <form id="company-form">
+                <input type="hidden" id="company-id">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="company-name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="company-email">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" id="company-phone">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" id="company-city">
+                    </div>
+                    <div class="form-group">
+                        <label>Country</label>
+                        <input type="text" id="company-country">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="company-address" rows="2"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Timezone</label>
+                        <input type="text" id="company-timezone" value="UTC">
+                    </div>
+                    <div class="form-group">
+                        <label>SLA Hours</label>
+                        <input type="number" id="company-sla" value="24" min="1" max="720">
+                    </div>
+                </div>
+                <div class="form-group" id="company-active-group" style="display:none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="company-active" checked> Active
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCompanyModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="user-modal-title">New User</h3>
+                <button class="modal-close" onclick="closeUserModal()">&times;</button>
+            </div>
+            <form id="user-form">
+                <input type="hidden" id="user-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="user-fullname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email *</label>
+                        <input type="email" id="user-email" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" id="user-password-group">
+                        <label>Password *</label>
+                        <input type="password" id="user-password" minlength="8" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select id="user-role-select">
+                            <option value="client">Client</option>
+                            <option value="agent">Agent</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row" id="user-edit-fields">
+                    <div class="form-group">
+                        <label>Company</label>
+                        <select id="user-company">
+                            <option value="">No Company</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Language</label>
+                        <select id="user-language">
+                            <option value="en">English</option>
+                            <option value="pt-BR">Português</option>
+                            <option value="es">Español</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="user-active-group" style="display:none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="user-active" checked> Active
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Ticket Detail Modal -->
+    <div id="ticket-detail-modal" class="modal modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="detail-ticket-title">Ticket Details</h3>
+                <button class="modal-close" onclick="closeTicketDetailModal()">&times;</button>
+            </div>
+            <div class="ticket-detail-tabs">
+                <button class="detail-tab active" data-detail-tab="info">Info</button>
+                <button class="detail-tab" data-detail-tab="comments">Comments</button>
+                <button class="detail-tab" data-detail-tab="attachments">Attachments</button>
+                <button class="detail-tab" data-detail-tab="history">History</button>
+            </div>
+            <div class="ticket-detail-content">
+                <!-- Info Tab -->
+                <div id="detail-info" class="detail-tab-content active">
+                    <div class="detail-grid">
+                        <div class="detail-field"><label>Status</label><span id="detail-status" class="badge"></span></div>
+                        <div class="detail-field"><label>Priority</label><span id="detail-priority" class="badge"></span></div>
+                        <div class="detail-field"><label>Category</label><span id="detail-category"></span></div>
+                        <div class="detail-field"><label>Company</label><span id="detail-company"></span></div>
+                        <div class="detail-field"><label>Assignee</label><span id="detail-assignee"></span></div>
+                        <div class="detail-field"><label>Creator</label><span id="detail-creator"></span></div>
+                        <div class="detail-field"><label>Created</label><span id="detail-created"></span></div>
+                        <div class="detail-field"><label>Updated</label><span id="detail-updated"></span></div>
+                        <div class="detail-field"><label>SLA Due</label><span id="detail-sla"></span></div>
+                        <div class="detail-field full-width"><label>Description</label><div id="detail-description"></div></div>
+                    </div>
+                    <div class="detail-actions">
+                        <select id="detail-status-select" onchange="updateDetailStatus()">
+                            <option value="open">Open</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="waiting_customer">Waiting Customer</option>
+                            <option value="waiting_third_party">Waiting 3rd Party</option>
+                            <option value="closed">Closed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                        <select id="detail-assignee-select" class="staff-only" onchange="updateDetailAssignee()">
+                            <option value="">Unassigned</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Comments Tab -->
+                <div id="detail-comments" class="detail-tab-content">
+                    <div id="comments-list"></div>
+                    <form id="comment-form" class="comment-form">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <textarea id="comment-content" rows="3" placeholder="Add a comment..." required></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row staff-only">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="comment-internal"> Internal note (agents only)
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Comment</button>
+                    </form>
+                </div>
+                <!-- Attachments Tab -->
+                <div id="detail-attachments" class="detail-tab-content">
+                    <div id="attachments-list"></div>
+                    <form id="attachment-form" class="attachment-form">
+                        <input type="file" id="attachment-file" required>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </form>
+                </div>
+                <!-- History Tab -->
+                <div id="detail-history" class="detail-tab-content">
+                    <div id="history-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

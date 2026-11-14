@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    image: ticket-system:latest
+    container_name: ticket-system
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Paths inside the container (override what .env has for local runs)
+      DATABASE_URL: sqlite:////data/tickets.db
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - ticket-data:/data
+    restart: unless-stopped
+
+volumes:
+  ticket-data:
