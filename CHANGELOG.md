@@ -4,6 +4,19 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Corrigido
+- `/painel`: o card de login aparecia sempre por cima do painel de gestão (`#login-screen` forçava
+  `display: flex` e vencia `.screen { display: none }`).
+- Busca de tickets, usuários e empresas: `%` e `_` agora são tratados como texto, não como curinga do `LIKE`.
+
+### Segurança
+- `python-jose` substituído por `PyJWT` e dependências atualizadas (FastAPI, Starlette, python-multipart,
+  pydantic e outras): `pip-audit` sem vulnerabilidades conhecidas.
+- `APP_ENV=production` faz o app recusar `SECRET_KEY` fraca ou padrão (antes só havia um aviso no log).
+- 2 novos testes (total: 42).
+
 ## [2.0.0] - 2026-11-13
 
 ### Adicionado

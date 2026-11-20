@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     APP_URL: str = "http://localhost:8000"  # used in e-mail links
     LOG_LEVEL: str = "INFO"
+    APP_ENV: str = "development"  # "production" makes a weak SECRET_KEY a startup error
 
     # --- Security ---
     SECRET_KEY: str = "dev-secret-change-in-production-min-32-chars-long"

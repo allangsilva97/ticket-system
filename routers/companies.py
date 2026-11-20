@@ -12,6 +12,7 @@ from schemas import (
 )
 from auth import get_current_active_user, require_admin
 from services import audit_service as audit
+from utils import LIKE_ESCAPE, like_contains
 
 router = APIRouter(prefix="/api/companies", tags=["Companies"])
 
@@ -64,7 +65,7 @@ def list_companies(
         query = query.filter(Company.id == current_user.company_id)
 
     if search:
-        query = query.filter(Company.name.ilike(f"%{search}%"))
+        query = query.filter(Company.name.ilike(like_contains(search), escape=LIKE_ESCAPE))
     if is_active is not None:
         query = query.filter(Company.is_active == is_active)
 

@@ -10,8 +10,7 @@ license = { text = "MIT" }
 testpaths = ["tests"]
 addopts = "-q"
 filterwarnings = [
-    # Third-party deprecations we can't fix here (python-jose, starlette)
-    "ignore::DeprecationWarning:jose.*",
+    # Third-party deprecations we can't fix here (starlette)
     "ignore::DeprecationWarning:starlette.*",
 ]
 

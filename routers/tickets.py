@@ -27,6 +27,7 @@ from services import audit_service as audit, email_service as mail
 from services.sla_service import FINAL_STATUSES, calculate_sla_due, is_overdue, reset_notifications, sla_status
 
 from routers.audit import audit_entry_to_dict  # noqa: E402
+from utils import LIKE_ESCAPE, like_contains
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
@@ -183,7 +184,9 @@ def list_tickets(
     if creator_id:
         query = query.filter(Ticket.creator_id == creator_id)
     if search:
-        query = query.filter(or_(Ticket.title.ilike(f"%{search}%"), Ticket.description.ilike(f"%{search}%")))
+        pattern = like_contains(search)
+        query = query.filter(or_(Ticket.title.ilike(pattern, escape=LIKE_ESCAPE),
+                                 Ticket.description.ilike(pattern, escape=LIKE_ESCAPE)))
     if date_from:
         query = query.filter(Ticket.created_at >= date_from)
     if date_to:

@@ -29,7 +29,7 @@ notificações por e-mail.
 
 ## 🧱 Stack
 
-- **Backend:** Python 3.10+, FastAPI, SQLAlchemy 2, Pydantic 2, python-jose, passlib/bcrypt
+- **Backend:** Python 3.10+, FastAPI, SQLAlchemy 2, Pydantic 2, PyJWT, passlib/bcrypt
 - **Banco:** SQLite (padrão) — compatível com PostgreSQL/MySQL via `DATABASE_URL`
 - **Frontend:** HTML + CSS + JavaScript puro, Chart.js
 - **Qualidade:** pytest (31 testes), ruff, GitHub Actions

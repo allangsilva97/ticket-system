@@ -270,6 +270,28 @@ class PublicTrackingTests(ApiTestCase):
             self.assertIn("portal.js", r.text)
 
 
+class SearchAndStyleTests(ApiTestCase):
+    def test_search_treats_like_wildcards_literally(self):
+        # "%" and "_" must match themselves, not "anything"
+        self.client.post("/api/tickets", headers=self.admin, json={
+            "title": "Disk 100% full", "company_id": self.company_a, "priority": "low", "category": "technical"})
+        self.create_ticket(self.admin, self.company_a)  # "Printer broken"
+        for term, expected in (("100%", 1), ("%", 1), ("_", 0), ("Printer", 1)):
+            r = self.client.get("/api/tickets", params={"search": term}, headers=self.admin)
+            self.assertEqual(r.json()["total"], expected, term)
+        users = self.client.get("/api/users", params={"search": "_"}, headers=self.admin).json()
+        self.assertEqual(users["total"], 0)
+        companies = self.client.get("/api/companies", params={"search": "%"}, headers=self.admin).json()
+        self.assertEqual(companies["total"], 0)
+
+    def test_admin_panel_login_card_is_hidden_by_default(self):
+        css = self.client.get("/static/style.css").text
+        # #login-screen must not force display:flex, or it shows up above the panel on /painel
+        rule = next(line for line in css.splitlines() if line.startswith("#login-screen {"))
+        self.assertNotIn("display", rule)
+        self.assertIn("#login-screen.screen.active { display: flex; }", css)
+
+
 class StaffOverviewTests(ApiTestCase):
     def test_overview_staff_only_and_counts_workload(self):
         t = self.create_ticket(self.client_a, self.company_a)

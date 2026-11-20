@@ -28,9 +28,14 @@ logger = logging.getLogger("ticket_system")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     key = settings.SECRET_KEY
-    if len(key) < 32 or key.startswith("dev-secret") or "change" in key.lower():
+    if len(key) < 32 or key.startswith("dev-secret") or "troque" in key.lower() or "change" in key.lower():
+        if settings.APP_ENV.lower() == "production":
+            raise RuntimeError(
+                "SECRET_KEY is a placeholder or too short: set a random value before running in production "
+                "(python -c \"import secrets; print(secrets.token_urlsafe(48))\")."
+            )
         logger.warning("SECRET_KEY is a placeholder or too short - anyone knowing it can forge admin tokens. "
-                       "Set a random value in .env before deploying.")
+                       "Set a random value in .env before deploying (and APP_ENV=production to enforce it).")
     init_db()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 

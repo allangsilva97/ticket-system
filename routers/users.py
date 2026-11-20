@@ -10,6 +10,7 @@ from models import User, UserRole, Ticket
 from schemas import User as UserSchema, PaginatedResponse, TicketList
 from auth import get_current_active_user, require_agent_or_admin
 from routers.tickets import to_ticket_list
+from utils import LIKE_ESCAPE, like_contains
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -40,7 +41,9 @@ def list_users(
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
     if search:
-        query = query.filter(or_(User.full_name.ilike(f"%{search}%"), User.email.ilike(f"%{search}%")))
+        pattern = like_contains(search)
+        query = query.filter(or_(User.full_name.ilike(pattern, escape=LIKE_ESCAPE),
+                                 User.email.ilike(pattern, escape=LIKE_ESCAPE)))
 
     total = query.count()
     users = query.order_by(User.full_name).offset((page - 1) * page_size).limit(page_size).all()
