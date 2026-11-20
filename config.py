@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     APP_URL: str = "http://localhost:8000"  # used in e-mail links
     LOG_LEVEL: str = "INFO"
+    TRUSTED_PROXY_HOPS: int = 0  # trusted reverse proxies in front of the app (Vercel, Render: 1); see utils.client_ip
     APP_ENV: str = "development"  # "production" makes a weak SECRET_KEY a startup error
 
     # --- Security ---
@@ -66,6 +67,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+def normalize_database_url(url: str) -> str:
+    """Hosts such as Neon, Render and Heroku hand out postgres:// or postgresql:// URLs, which SQLAlchemy
+    maps to the old psycopg2 driver. This project ships psycopg 3, so point those URLs at it."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+settings.DATABASE_URL = normalize_database_url(settings.DATABASE_URL)
 
 # Relative sqlite paths are resolved against the project folder, not the current working dir
 if settings.DATABASE_URL.startswith("sqlite:///./"):

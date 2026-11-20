@@ -19,6 +19,7 @@ from auth import (
 )
 from config import settings
 from services import audit_service as audit
+from utils import client_ip
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -126,7 +127,7 @@ def login(
 ):
     """Form login (username = email). Works with the frontend and Swagger's Authorize button."""
     email = form_data.username.strip().lower()
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
 
     _check_login_allowed(ip, email)
     user = authenticate_user(db, email, form_data.password)

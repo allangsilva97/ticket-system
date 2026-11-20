@@ -3,7 +3,22 @@ name = "ticket-system"
 version = "2.0.0"
 description = "Sistema de tickets de suporte multiempresa (FastAPI) com SLA, auditoria e notificações por e-mail."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"  # fastapi 0.165 needs 3.11+
+# Runtime dependencies. Hosts that build from pyproject.toml (e.g. Vercel) install only what is listed here,
+# so keep these pins identical to requirements.txt (tests/test_dependencies.py checks it).
+dependencies = [
+    "fastapi==0.165.0",
+    "uvicorn==0.54.0",
+    "sqlalchemy==2.0.57",
+    "psycopg[binary]==3.3.9",
+    "pydantic[email]==2.14.4",
+    "pydantic-settings==2.16.3",
+    "PyJWT==2.15.1",
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.0.1",
+    "python-multipart==0.0.34",
+    "python-dotenv==1.2.4",
+]
 license = { text = "MIT" }
 
 [tool.pytest.ini_options]
@@ -20,7 +35,7 @@ omit = [".venv/*", "tests/*"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 extend-exclude = [".venv", "venv"]
 
 [tool.ruff.lint]

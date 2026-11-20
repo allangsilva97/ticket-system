@@ -13,7 +13,9 @@ from pathlib import Path
 
 # Must be set BEFORE importing the app (settings are read at import time)
 _tmpdir = tempfile.mkdtemp(prefix="ticket-tests-")
-os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmpdir, 'test.db').as_posix()}"
+# SQLite by default. TEST_DATABASE_URL runs the suite on another database (a scratch PostgreSQL database:
+# the tests drop and recreate every table in it).
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{Path(_tmpdir, 'test.db').as_posix()}"
 os.environ["UPLOAD_DIR"] = str(Path(_tmpdir, "uploads"))
 os.environ["SECRET_KEY"] = "test-only-secret-key-0123456789abcdefghijklmnop"
 os.environ["SLA_MONITOR_ENABLED"] = "false"
@@ -313,6 +315,7 @@ class StaffOverviewTests(ApiTestCase):
         self.assertIn("app.js", self.client.get("/painel").text)
 
 
+@unittest.skipUnless(engine.dialect.name == "sqlite", "recreates a pre-v2.1 SQLite table")
 class MigrationTests(unittest.TestCase):
     def test_legacy_database_gets_tracking_codes(self):
         from sqlalchemy import text

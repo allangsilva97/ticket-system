@@ -121,6 +121,18 @@ Todas as opções ficam no `.env` (veja [`.env.example`](.env.example)). As prin
 | `SLA_WARNING_THRESHOLD` | `0.75` | Fração do prazo que dispara o alerta |
 | `MAX_FILE_SIZE_MB` | `10` | Tamanho máximo de anexo |
 
+## ☁️ Publicar na Vercel + Neon (PostgreSQL)
+
+1. Crie um banco no Neon (pela Vercel Marketplace) e use a URL como `DATABASE_URL` (`postgres://` e `postgresql://` já usam o driver psycopg 3).
+2. Variáveis no projeto: `DATABASE_URL`, `SECRET_KEY` (aleatória), `APP_ENV=production`, `TRUSTED_PROXY_HOPS=1`,
+   `SLA_MONITOR_ENABLED=false` e `UPLOAD_DIR=/tmp/uploads`.
+3. **Crie o primeiro admin antes de abrir o site ao público:** o primeiro cadastro (`/api/auth/register`) vira admin sem login.
+   Por exemplo, rode `init_db()` e grave o usuário admin direto no banco, localmente, apontando `DATABASE_URL` para o Neon.
+4. Limites da hospedagem serverless: o monitor de SLA (tarefa em segundo plano) não roda, e os anexos ficam em
+   `/tmp`, que é apagado a qualquer momento. Para uso real, guarde os anexos em um armazenamento de objetos.
+5. A Vercel instala só o que está em `[project].dependencies` do `pyproject.toml`; `tests/test_dependencies.py` garante que
+   a lista é igual à do `requirements.txt`.
+
 ## 🧪 Testes e lint
 
 ```bash

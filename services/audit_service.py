@@ -11,6 +11,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from models import AuditAction, AuditEntityType, AuditLog, User
+from utils import client_ip as _client_ip
 
 TICKET_FIELDS = ("title", "description", "status", "priority", "category",
                  "company_id", "assignee_id", "sla_due_at")
@@ -39,7 +40,7 @@ def diff(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Dict[str, A
 def client_ip(request: Optional[Request]) -> Optional[str]:
     if request is None or request.client is None:
         return None
-    return request.client.host
+    return _client_ip(request)
 
 
 def log(
