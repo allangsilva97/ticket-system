@@ -24,6 +24,20 @@ def test_placeholder_key_refused_on_hosting_platform(monkeypatch, platform_var):
             pass
 
 
+def test_docs_hidden_on_hosting_platform(monkeypatch):
+    import importlib
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(main.settings, "APP_ENV", "development")
+    monkeypatch.setattr(main.settings, "ENABLE_DOCS", None)
+    try:
+        importlib.reload(main)  # the app is built at import time, so rebuild it under the platform settings
+        assert main.app.docs_url is None and main.app.openapi_url is None
+    finally:
+        monkeypatch.undo()
+        importlib.reload(main)
+    assert main.app.docs_url == "/docs"
+
+
 def test_placeholder_key_allowed_locally(monkeypatch, tmp_path):
     monkeypatch.delenv("VERCEL", raising=False)
     monkeypatch.delenv("RENDER", raising=False)

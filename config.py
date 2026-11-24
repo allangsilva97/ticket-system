@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     TRUSTED_PROXY_HOPS: int = 0  # trusted reverse proxies in front of the app (Vercel, Render: 1); see utils.client_ip
     APP_ENV: str = "development"  # "production" makes a weak SECRET_KEY a startup error
+    # Interactive API docs (/docs, /redoc, /openapi.json). Unset: on in development, off on production and hosting platforms.
+    ENABLE_DOCS: Optional[bool] = None
 
     # --- Security ---
     SECRET_KEY: str = "dev-secret-change-in-production-min-32-chars-long"
