@@ -29,7 +29,9 @@ logger = logging.getLogger("ticket_system")
 async def lifespan(_: FastAPI):
     key = settings.SECRET_KEY
     if len(key) < 32 or key.startswith("dev-secret") or "troque" in key.lower() or "change" in key.lower():
-        if settings.APP_ENV.lower() == "production":
+        # Hosting platforms set VERCEL / RENDER themselves: a deploy that forgot APP_ENV must still refuse the
+        # public placeholder key, because anyone who knows it can forge an administrator token.
+        if settings.APP_ENV.lower() == "production" or os.getenv("VERCEL") or os.getenv("RENDER"):
             raise RuntimeError(
                 "SECRET_KEY is a placeholder or too short: set a random value before running in production "
                 "(python -c \"import secrets; print(secrets.token_urlsafe(48))\")."

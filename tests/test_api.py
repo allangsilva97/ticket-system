@@ -203,6 +203,17 @@ class TicketTests(ApiTestCase):
         self.assertTrue(outsider_id)
         self.assertEqual(self.client.get(dl, headers=self.login("client@b.example.com")).status_code, 403)
 
+    def test_download_type_comes_from_extension_not_upload(self):
+        # An uploader who claims text/html for a .png must not get an HTML page back from the download.
+        ticket = self.create_ticket(self.client_a, self.company_a)
+        r = self.client.post(f"/api/tickets/{ticket['id']}/attachments", headers=self.client_a,
+                             files={"file": ("chart.png", b"<script>alert(1)</script>", "text/html")})
+        self.assertEqual(r.status_code, 201, r.text)
+        dl = self.client.get(f"/api/tickets/attachments/{r.json()['id']}/download", headers=self.client_a)
+        self.assertEqual(dl.headers["content-type"], "image/png")
+        self.assertEqual(dl.headers["x-content-type-options"], "nosniff")
+        self.assertIn("attachment", dl.headers["content-disposition"])
+
     def test_disallowed_file_type_rejected(self):
         ticket = self.create_ticket(self.client_a, self.company_a)
         r = self.client.post(f"/api/tickets/{ticket['id']}/attachments", headers=self.client_a,

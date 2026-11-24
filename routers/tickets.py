@@ -35,6 +35,17 @@ UPLOAD_DIR = settings.UPLOAD_DIR
 MAX_FILE_SIZE = settings.max_file_size_bytes
 ALLOWED_EXTENSIONS = settings.allowed_extensions_set
 
+# Download types come from the file extension, never from what the uploader claimed. A browser renders
+# text/html or image/svg+xml, so a file uploaded as "x.png" with an HTML type could run script on this site.
+DOWNLOAD_TYPES = {
+    ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".txt": "text/plain", ".csv": "text/csv", ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".zip": "application/zip",
+}
+
 TICKET_LOADERS = (joinedload(Ticket.company), joinedload(Ticket.creator), joinedload(Ticket.assignee))
 
 
@@ -633,10 +644,12 @@ def download_attachment(
     attachment = _get_attachment_checked(db, attachment_id, current_user)
     if not os.path.exists(attachment.file_path):
         raise HTTPException(status_code=404, detail="File missing on server")
+    extension = os.path.splitext(attachment.original_filename or "")[1].lower()
     return FileResponse(
         attachment.file_path,
-        media_type=attachment.content_type or "application/octet-stream",
-        filename=attachment.original_filename,
+        media_type=DOWNLOAD_TYPES.get(extension, "application/octet-stream"),
+        filename=attachment.original_filename,  # sends Content-Disposition: attachment, so it downloads
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
